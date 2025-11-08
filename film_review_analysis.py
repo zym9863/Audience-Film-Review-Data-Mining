@@ -5,6 +5,7 @@
 功能：对电影评论数据进行全面的数据挖掘和可视化分析
 """
 
+import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -16,16 +17,81 @@ from wordcloud import WordCloud
 import warnings
 from datetime import datetime
 import re
+from matplotlib import font_manager
 
 warnings.filterwarnings('ignore')
 
 # 设置中文显示
 plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'SimSun']
+plt.rcParams['font.family'] = 'sans-serif'
 plt.rcParams['axes.unicode_minus'] = False
 
 # 设置绘图风格
 sns.set_style("whitegrid")
 sns.set_palette("husl")
+
+
+def _configure_chinese_font():
+    """配置 Matplotlib 字体，确保中文正常显示并返回可用字体信息。"""
+    candidate_fonts = [
+        ("SimHei", ["simhei.ttf"]),
+        ("Microsoft YaHei", ["msyh.ttc", "msyh.ttf"]),
+        ("SimSun", ["simsun.ttc", "simsun.ttf"]),
+        ("PingFang SC", ["PingFang.ttc", "PingFang Regular.ttf"]),
+        ("Noto Sans CJK SC", ["NotoSansCJK-Regular.ttc", "NotoSansCJKsc-Regular.otf"]),
+        ("Source Han Sans CN", ["SourceHanSansCN-Regular.otf", "SourceHanSansSC-Regular.otf"]),
+    ]
+
+    fm = font_manager.fontManager
+    available_by_name = {f.name.lower(): f.fname for f in fm.ttflist}
+
+    def _set_rc(font_name_to_use):
+        plt.rcParams['font.sans-serif'] = [font_name_to_use]
+        plt.rcParams['font.family'] = 'sans-serif'
+
+    search_dirs = [
+        os.path.join(os.environ.get("WINDIR", "C:/Windows"), "Fonts"),
+        "/System/Library/Fonts",
+        "/Library/Fonts",
+        os.path.expanduser("~/Library/Fonts"),
+        "/usr/share/fonts",
+        "/usr/local/share/fonts",
+        os.path.expanduser("~/.local/share/fonts"),
+    ]
+
+    for font_name, file_names in candidate_fonts:
+        try:
+            found_path = font_manager.findfont(font_name, fallback_to_default=False)
+            if found_path and os.path.exists(found_path):
+                actual_name = font_manager.FontProperties(fname=found_path).get_name()
+                _set_rc(actual_name)
+                return actual_name, found_path
+        except Exception:
+            pass
+
+        lower_name = font_name.lower()
+        if lower_name in available_by_name:
+            font_path = available_by_name[lower_name]
+            actual_name = font_manager.FontProperties(fname=font_path).get_name() if os.path.exists(font_path) else font_name
+            _set_rc(actual_name)
+            return actual_name, font_path
+
+        for file_name in file_names:
+            for directory in search_dirs:
+                candidate_path = os.path.join(directory, file_name)
+                if os.path.exists(candidate_path):
+                    try:
+                        fm.addfont(candidate_path)
+                        actual_name = font_manager.FontProperties(fname=candidate_path).get_name()
+                        _set_rc(actual_name)
+                        return actual_name, candidate_path
+                    except Exception:
+                        continue
+
+    return None, None
+
+
+CHINESE_FONT_NAME, CHINESE_FONT_PATH = _configure_chinese_font()
 
 
 class FilmReviewAnalyzer:
@@ -48,9 +114,14 @@ class FilmReviewAnalyzer:
         self.df = None
         self.output_dir = "analysis_results"
         self.report = []
+        self.wordcloud_font_path = CHINESE_FONT_PATH
+
+        if CHINESE_FONT_NAME:
+            print(f"✅ 检测到中文字体: {CHINESE_FONT_NAME}")
+        else:
+            print("⚠️ 未检测到中文字体，图表中的中文可能无法正常显示。")
 
         # 创建输出目录
-        import os
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
             print(f"✅ 创建输出目录: {self.output_dir}")
@@ -130,20 +201,26 @@ class FilmReviewAnalyzer:
         # 1. 星级分布饼图
         print("   - 生成星级分布饼图...")
         fig, axes = plt.subplots(1, 2, figsize=(16, 6))
-
-        # 左图：星级分布
         star_counts = self.df['Star'].value_counts().sort_index()
         colors = ['#ff6b6b', '#f06595', '#ffa500', '#74c0fc', '#51cf66']
-        axes[0].pie(star_counts.values, labels=[f'{i}星' for i in star_counts.index],
-                   autopct='%1.1f%%', colors=colors, startangle=90)
+        axes[0].pie(
+            star_counts.values,
+            labels=[f'{i}星' for i in star_counts.index],
+            autopct='%1.1f%%',
+            colors=colors,
+            startangle=90
+        )
         axes[0].set_title('用户星级评分分布', fontsize=14, fontweight='bold')
 
-        # 右图：情感分布
         sentiment_counts = self.df['sentiment'].value_counts()
         sentiment_colors = {'正面': '#51cf66', '中性': '#ffa500', '负面': '#ff6b6b'}
-        axes[1].pie(sentiment_counts.values, labels=sentiment_counts.index,
-                   autopct='%1.1f%%', colors=[sentiment_colors[s] for s in sentiment_counts.index],
-                   startangle=90)
+        axes[1].pie(
+            sentiment_counts.values,
+            labels=sentiment_counts.index,
+            autopct='%1.1f%%',
+            colors=[sentiment_colors[s] for s in sentiment_counts.index],
+            startangle=90
+        )
         axes[1].set_title('情感倾向分布', fontsize=14, fontweight='bold')
 
         plt.tight_layout()
@@ -248,9 +325,17 @@ class FilmReviewAnalyzer:
         # 3. 生成词云
         print("   - 生成词云图...")
 
+        if not self.wordcloud_font_path:
+            print("⚠️ 未找到可用的中文字体文件，已跳过词云图生成。")
+            self.report.append("⚠️ 由于系统缺少中文字体，词云图未生成。\n\n")
+            print("✅ 关键词分析完成！")
+            return word_freq
+
+        font_path = self.wordcloud_font_path
+
         # 整体词云
         wordcloud = WordCloud(
-            font_path='C:/Windows/Fonts/simhei.ttf',
+            font_path=font_path,
             width=1600,
             height=800,
             background_color='white',
@@ -268,7 +353,7 @@ class FilmReviewAnalyzer:
         # 正面评论词云
         if positive_words:
             positive_wc = WordCloud(
-                font_path='C:/Windows/Fonts/simhei.ttf',
+                font_path=font_path,
                 width=1600,
                 height=800,
                 background_color='white',
@@ -283,7 +368,7 @@ class FilmReviewAnalyzer:
         # 负面评论词云
         if negative_words:
             negative_wc = WordCloud(
-                font_path='C:/Windows/Fonts/simhei.ttf',
+                font_path=font_path,
                 width=1600,
                 height=800,
                 background_color='white',
