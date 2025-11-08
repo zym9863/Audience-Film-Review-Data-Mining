@@ -1,3 +1,5 @@
+[中文](README.md) | [English](README-EN.md)
+
 # 影评数据挖掘分析系统 - 使用说明
 
 ## 📖 项目简介
