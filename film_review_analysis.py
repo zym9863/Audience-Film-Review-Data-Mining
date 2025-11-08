@@ -419,7 +419,10 @@ class FilmReviewAnalyzer:
 
         # 评论数TOP10
         ax1 = axes[0]
-        movies = [m[:15]+'...' if len(m) > 15 else m for m in top_movies.index]
+        movies = []
+        for m in top_movies.index:
+            label = str(m)
+            movies.append(label[:15] + '...' if len(label) > 15 else label)
         bars1 = ax1.barh(range(len(movies)), top_movies['review_count'],
                         color=plt.cm.Spectral(np.linspace(0, 1, len(movies))))
         ax1.set_yticks(range(len(movies)))
@@ -435,7 +438,10 @@ class FilmReviewAnalyzer:
 
         # 评分最高TOP10
         top_rated = movie_stats.nlargest(10, 'Score')
-        movies2 = [m[:15]+'...' if len(m) > 15 else m for m in top_rated.index]
+        movies2 = []
+        for m in top_rated.index:
+            label = str(m)
+            movies2.append(label[:15] + '...' if len(label) > 15 else label)
         bars2 = axes[1].barh(range(len(movies2)), top_rated['Score'],
                             color=plt.cm.RdYlGn(np.linspace(0.3, 1, len(movies2))))
         axes[1].set_yticks(range(len(movies2)))
